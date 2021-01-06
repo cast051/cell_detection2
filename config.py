@@ -24,8 +24,9 @@ def get_config(is_training=True):
         config.optimizer='adam' #'optimizer', 'adam', 'adadelta', 'momentum', 'rmsprop'
 
     else:
-        config.testmodel="test1"     #"test1"  "test2"
+        config.testmodel="test3"     #"test1"  "test2" "test3"
         config.is_training=False
+        config.test_img_dir = '/2_data/share/workspace/cj/la_zong/ljw_test/'
         config.newckpt_path=config.weight_dir+'/pb/model.ckpt'
         config.pb_path = config.weight_dir + '/pb/model.pb'
         config.pb2_path = 'classifier/weight/model2.pb'

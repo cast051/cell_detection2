@@ -8,7 +8,8 @@ import numpy as np
 import cv2
 import math
 import imageio
-
+from glob import glob
+import time
 os.environ['CUDA_VISIBLE_DEVICES']='4'
 
 # 分类器阈值 大于阈值为阳性，小于阈值为阴性
@@ -126,6 +127,63 @@ def main():
                 cv2.circle(image_co, (pointx1, pointy1), 3, (0, 255, 0), -1)
             imageio.imwrite(config.log_test_dir + str(itr) + "_co.png", img_out)
             print("Saved image: %d" % itr)
+    elif config.testmodel=="test3":
+        #load post process op
+        postprocess_module = tf.load_op_library(config.so_path)
+
+        #create session and load model
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
+
+        with tf.gfile.FastGFile(config.pb_path, "rb") as f:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(f.read())
+            input, output, net_output, info, get_info = tf.import_graph_def(graph_def,
+                    return_elements=["input:0", "output:0","net_output:0", "info:0","get_info:0"])
+
+        with tf.gfile.FastGFile(config.pb2_path, "rb") as f:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(f.read())
+            input2, output2, = tf.import_graph_def(graph_def, return_elements=["input:0", "output:0"])
+
+        info_ = sess.run([info], feed_dict={get_info: 0})
+        print(info_)
+        print("testing ..........")
+        img_list = glob(config.test_img_dir + '*.jpg')
+        totle_time = 0
+        for idx,img_path in enumerate(img_list):
+            name = os.path.split(img_path)[1]
+            img_name = os.path.splitext(name)[0]
+            img = imageio.imread(img_path)
+            img = np.expand_dims(img, 0)
+            net_output_, output_ = sess.run([net_output, output], feed_dict={input: img})
+
+            output_=np.squeeze(output_,0)
+            # get point rgb mean
+            rgb_mean = get_rgbmean(output_, img)
+            # run model2 to classifier
+            rgbclassifier_output = sess.run(output2, feed_dict={input2: rgb_mean})
+            # Get Positive or Negetive type
+            final_output = output_
+            for i in range(len(rgbclassifier_output)):
+                if rgbclassifier_output[i] > classifier_threshold:
+                    final_output[i][2] = 1
+                else:
+                    final_output[i][2] = 0
+
+            img_out = img[0].astype(np.uint8)
+            for i in range(final_output.shape[0]):
+                pointx1 = final_output[i][0].astype(np.uint)
+                pointy1 = final_output[i][1].astype(np.uint)
+                rgb_value = final_output[i][2]
+                if rgb_value == 1:
+                    rgbschar = (255, 0, 0)  # red
+                else:
+                    rgbschar = (0, 255, 0)  # green
+                cv2.circle(img_out, (pointx1, pointy1), 3, rgbschar, -1)
+            imageio.imwrite(config.log_test_dir +img_name + "_co.png", img_out)
+            # imageio.imwrite(config.log_test_dir +img_name + "_mask.png", (255 * net_output_[0]).astype(np.uint8))
+            print("processing ",idx," img: ",img_name)
 
 # image pad
 def image_pad(img):
@@ -187,6 +245,8 @@ def get_rgbmean(post_output, img):
             rgb_mean = roi_mean_
         else:
             rgb_mean = np.concatenate((rgb_mean, roi_mean_), axis=0)
+    if len(post_output)==0:
+        rgb_mean=np.zeros((0,3))
     return rgb_mean
 
 
